@@ -1,2 +1,3 @@
-# pygame-test
-First pygame app
+# Pygame test
+
+Enostaven program za demonstracijo knjižnice pygame.
