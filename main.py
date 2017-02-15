@@ -40,7 +40,7 @@ class Igralec(pygame.sprite.Sprite):
         self.smeri[smer] = status
 
     # Vsak frame igre moramo premakniti igralca. To dela metoda update, ki jo
-    # klǐcemo v vsakem prehodu
+    # klicemo v vsakem prehodu
     def update(self):
         if self.smeri[self.down]:
             self.premik(0, 5)
