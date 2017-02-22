@@ -1,5 +1,6 @@
 from random import randint
 import pygame
+from pygame.sprite import spritecollide as sc
 
 # Velikost okna
 SIRINA = 600
@@ -14,8 +15,11 @@ class Igralec(pygame.sprite.Sprite):
     # Metoda __init__ je funkcija, ki se zazene ob kreairanju novega igralca.
     # V njej nastavimo vse osnovne lastnosti igralca
     def __init__(self, up=pygame.K_UP, down=pygame.K_DOWN,
-                 left=pygame.K_LEFT, right=pygame.K_RIGHT):
+                 left=pygame.K_LEFT, right=pygame.K_RIGHT, ovire=None):
         super().__init__()
+        # Shranimo si vse ovire v levelu
+        self.ovire = ovire
+
         # Shranimo vse tipke za kasnejso uporabo
         self.up = up
         self.down = down
@@ -27,6 +31,10 @@ class Igralec(pygame.sprite.Sprite):
         self.image.fill((randint(0, 255), randint(0, 255), randint(0, 255)))
         self.rect = self.image.get_rect()
 
+        # hitrosti igralca
+        self.vx = 0
+        self.vy = 0
+
         # Predpostavimo, da so vse tipke spuscene ob zacetku igre
         self.smeri = {
             self.up: False,
@@ -35,35 +43,103 @@ class Igralec(pygame.sprite.Sprite):
             self.left: False,
         }
 
-    # ko uporabnik pritisne ali spusti neko tipko, si to oznacimo
+    # Ali Igralec stoji na oviri (Tako vemo, ali lahko skoči)
+    def na_oviri(self):
+        if self.rect.bottom >= VISINA:
+            # Lahko stoji tudi na dnu ekrana
+            return True
+        elif self.ovire is None:
+            # Če nismo dobili ovir, potem ne more stati na njih
+            return False
+        else:
+            self.rect.y += 1
+            rezultat = sc(self, self.ovire, False)
+            self.rect.y -= 1
+            return rezultat
+
+    # ko uporabnik pritisne ali spusti neko tipko ustrezno popravimo hitrosti
     def oznaci_pritisk(self, smer, status):
+        # Najprej si zabeležimo smer premika
         self.smeri[smer] = status
+
+        hitrost = 10
+
+        # Tipka dol ne naredi nič
+        if self.smeri[self.down]:
+            pass
+        # S tipko gor skočimo
+        if self.smeri[self.up] and self.na_oviri():
+            self.vy = -20
+
+        # če držimo levo ali desno se premikamo levo, ali desno, sicer se ne
+        self.vx = 0
+        if self.smeri[self.left]:
+            self.vx = -hitrost
+        if self.smeri[self.right]:
+            self.vx = hitrost
 
     # Vsak frame igre moramo premakniti igralca. To dela metoda update, ki jo
     # klicemo v vsakem prehodu
     def update(self):
-        if self.smeri[self.down]:
-            self.premik(0, 5)
-        if self.smeri[self.up]:
-            self.premik(0, -5)
-        if self.smeri[self.left]:
-            self.premik(-5, 0)
-        if self.smeri[self.right]:
-            self.premik(5, 0)
+        # Najprej poglejmo premik v x smeri
+        self.premik(self.vx, 0)
+        # Poglejmo ali smo se ob premiku v x smer kam zaleteli
+        for ov in sc(self, self.ovire, False):
+            if self.vx > 0:
+                self.rect.right = ov.rect.left
+            else:
+                self.rect.left = ov.rect.right
+            self.vx = 0
+
+        # Naj se zgodi gravitacija
+        self.vy += 1
+        # Sedaj porihtajmo še premik v y smeri
+        self.premik(0, self.vy)
+        # Če se zabijemo v kakšno oviro se ustavimo
+        for ov in sc(self, self.ovire, False):
+            if self.vy > 0:
+                self.rect.bottom = ov.rect.top
+            else:
+                self.rect.top = ov.rect.bottom
+            self.vy = 0
 
     # Pomozna funkcija, ki premakne igralca in poskrbi, da ne gre iz ekrana
     def premik(self, x, y):
         self.rect.x += x
         self.rect.y += y
         self.rect.x = max(self.rect.x, 0)
-        self.rect.y = max(self.rect.y, 0)
         self.rect.right = min(self.rect.right, SIRINA)
-        self.rect.bottom = min(self.rect.bottom, VISINA)
+        if self.rect.y < 0:
+            self.rect.y = 0
+            self.vy = 0
+        if self.rect.bottom > VISINA:
+            self.rect.bottom = VISINA
+            self.vy = 0
+
+
+class Plato(pygame.sprite.Sprite):
+    """ Ravna podlaga po kateri lahko igralci skacejo. """
+
+    # Vse kar potrebujemo so položaj (x, y) in dimenzije (w, h)
+    def __init__(self, x=100, y=300, w=200, h=10):
+        super().__init__()
+        self.image = pygame.Surface((w, h))
+        self.image.fill((0, 255, 0))
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+
+
+# Naredimo nekaj odskočišč za igralce in jih poimenujemo "level"
+level = pygame.sprite.Group()
+level.add(Plato(50, 200, 100, 10))
+level.add(Plato(200, 300, 100, 10))
+# Spodaj dodamo še: level.draw(ekran)
 
 # Ustvarimo dva igralca, vsakega s svojim setom ukaznih tipk
 igralec = Igralec(pygame.K_w, pygame.K_s,
-                  pygame.K_a, pygame.K_d)
-igralec2 = Igralec()
+                  pygame.K_a, pygame.K_d, ovire=level)
+igralec2 = Igralec(ovire=level)
 
 # Oba igralca dodamo v skupino, da ju lazje skupaj risemo in posodabljamo
 igra_skupina = pygame.sprite.Group()
@@ -101,9 +177,10 @@ while igramo:
 
     # Cel ekran prebarvaj z ozadjem
     ekran.fill((200, 200, 255))
-    # Na ekran narisi igralce
+    # Na ekran narisi igralce in level
+    level.draw(ekran)
     igra_skupina.draw(ekran)
-    # Poskrbi, da se vse izrise na monitor
+    # Poskrbi, da se vse skupaj izrise na monitor
     pygame.display.flip()
 
 # Zapri okno pygame
