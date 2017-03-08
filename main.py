@@ -1,6 +1,10 @@
+import sys
 from random import randint
 import pygame
 from pygame.sprite import spritecollide as sc
+
+# Povejmo pygame naj se zažene
+pygame.init()
 
 # Velikost okna
 SIRINA = 600
@@ -17,6 +21,9 @@ class Igralec(pygame.sprite.Sprite):
     def __init__(self, up=pygame.K_UP, down=pygame.K_DOWN,
                  left=pygame.K_LEFT, right=pygame.K_RIGHT, ovire=None):
         super().__init__()
+        # Zapomnimo si življenje
+        self.ziv = 100
+
         # Shranimo si vse ovire v levelu
         self.ovire = ovire
 
@@ -28,8 +35,9 @@ class Igralec(pygame.sprite.Sprite):
 
         # Ustvari sliko igralca, ki je nakljucne barve
         self.image = pygame.Surface((50, 50))
-        self.image.fill((randint(0, 255), randint(0, 255), randint(0, 255)))
+        self.barva = (randint(0, 255), randint(0, 255), randint(0, 255))
         self.rect = self.image.get_rect()
+        self.narisi_me()
 
         # hitrosti igralca
         self.vx = 0
@@ -43,6 +51,15 @@ class Igralec(pygame.sprite.Sprite):
             self.left: False,
         }
 
+    # Metoda, ki izriše našo sliko na pravilno mesto zaslona
+    def narisi_me(self):
+        # Napolnimo se z barvo
+        self.image.fill(self.barva)
+        # Napišimo preostanek življenja
+        font = pygame.font.SysFont("comicsansms", 30)
+        text = font.render(str(self.ziv), True, (0, 0, 0))
+        self.image.blit(text, (5, 15))
+
     # Ali Igralec stoji na oviri (Tako vemo, ali lahko skoči)
     def na_oviri(self):
         if self.rect.bottom >= VISINA:
@@ -52,10 +69,17 @@ class Igralec(pygame.sprite.Sprite):
             # Če nismo dobili ovir, potem ne more stati na njih
             return False
         else:
+            # Premaknimo se za en pixel in poglejmo, če smo se zadeli ob kakšno
+            # oviro
             self.rect.y += 1
             rezultat = sc(self, self.ovire, False)
             self.rect.y -= 1
-            return rezultat
+            for ov in rezultat:
+                # Stik z oviro velja zgolj, če sicer stojimo nad njo
+                if self.rect.bottom <= ov.rect.top:
+                    return True
+            # Če nismo našli ovire na kateri smo, sporočimo False
+            return False
 
     # ko uporabnik pritisne ali spusti neko tipko ustrezno popravimo hitrosti
     def oznaci_pritisk(self, smer, status):
@@ -84,24 +108,35 @@ class Igralec(pygame.sprite.Sprite):
         # Najprej poglejmo premik v x smeri
         self.premik(self.vx, 0)
         # Poglejmo ali smo se ob premiku v x smer kam zaleteli
-        for ov in sc(self, self.ovire, False):
-            if self.vx > 0:
-                self.rect.right = ov.rect.left
-            else:
-                self.rect.left = ov.rect.right
-            self.vx = 0
+        # Ta del smo zakomentirali, saj želimo, prehodne ovire v smeri x-y
+        # for ov in sc(self, self.ovire, False):
+        #     if self.vx > 0:
+        #         self.rect.right = ov.rect.left
+        #     else:
+        #         self.rect.left = ov.rect.right
+        #     self.vx = 0
 
         # Naj se zgodi gravitacija
         self.vy += 1
-        # Sedaj porihtajmo še premik v y smeri
+        # Sedaj porihtajmo premik v y smeri
+        prejsnje_dno = self.rect.bottom
         self.premik(0, self.vy)
-        # Če se zabijemo v kakšno oviro se ustavimo
+        # Če se zabijemo v kakšno oviro:
         for ov in sc(self, self.ovire, False):
-            if self.vy > 0:
+            if ov.tip == 3:
+                # ovira tipa 3 je CILJ
+                print("Zmagal si")
+                sys.exit(0)
+            if self.vy > 0 and prejsnje_dno <= ov.rect.top:
+                # Če smo se zabili v oviro z zgornje strani, se ustavimo
                 self.rect.bottom = ov.rect.top
-            else:
-                self.rect.top = ov.rect.bottom
-            self.vy = 0
+                self.vy = 0
+            if ov.tip == 1:
+                # Ovira tipa 1 nas poškoduje
+                self.ziv -= 5
+        if self.ziv <= 0:
+            self.umri()
+        self.narisi_me()
 
     # Pomozna funkcija, ki premakne igralca in poskrbi, da ne gre iz ekrana
     def premik(self, x, y):
@@ -109,37 +144,67 @@ class Igralec(pygame.sprite.Sprite):
         self.rect.y += y
         self.rect.x = max(self.rect.x, 0)
         self.rect.right = min(self.rect.right, SIRINA)
-        if self.rect.y < 0:
-            self.rect.y = 0
-            self.vy = 0
+        # if self.rect.y < 0:
+        #     self.rect.y = 0
+        #     self.vy = 0
+        # self.rect.y = max(self.rect.y, 0)
         if self.rect.bottom > VISINA:
             self.rect.bottom = VISINA
             self.vy = 0
 
+    def umri(self):
+        self.rect.left = 0
+        self.rect.bottom = VISINA
+        self.ziv = 100
+        self.vx = 0
+        self.vy = 0
+
 
 class Plato(pygame.sprite.Sprite):
-    """ Ravna podlaga po kateri lahko igralci skacejo. """
-
+    """ Ravna podlaga po kateri lahko igralci skacejo.
+    Obstaja več tipov platojev
+        0: Navaden plato skozi katerega lahko gremo od spodaj,
+        1: Plato, ki nas poskoduje,
+        2: Plato skozi katerega nikakor ne moremo,
+        3: Cilj,
+    """
     # Vse kar potrebujemo so položaj (x, y) in dimenzije (w, h)
-    def __init__(self, x=100, y=300, w=200, h=10):
+    def __init__(self, x=100, y=300, w=200, h=10, tip=0):
         super().__init__()
         self.image = pygame.Surface((w, h))
-        self.image.fill((0, 255, 0))
+        if tip == 0:
+            self.image.fill((0, 255, 0))
+        elif tip == 1:
+            self.image.fill((255, 0, 0))
+        elif tip == 3:
+            self.image.fill((255, 255, 0))
+
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
+        self.tip = tip
 
 
 # Naredimo nekaj odskočišč za igralce in jih poimenujemo "level"
 level = pygame.sprite.Group()
-level.add(Plato(50, 200, 100, 10))
-level.add(Plato(200, 300, 100, 10))
+# Cilj
+level.add(Plato(10, 10, 50, 50, 3))
+# Nevarnosti
+level.add(Plato(200, 395, 400, 10, 1))
+level.add(Plato(200, 300, 50, 10, 1))
+# Odskocisca
+level.add(Plato(250, 300, 50, 10))
+level.add(Plato(500, 200, 50, 10))
+level.add(Plato(300, 100, 50, 10))
+level.add(Plato(10, 100, 100, 10))
 # Spodaj dodamo še: level.draw(ekran)
 
 # Ustvarimo dva igralca, vsakega s svojim setom ukaznih tipk
 igralec = Igralec(pygame.K_w, pygame.K_s,
                   pygame.K_a, pygame.K_d, ovire=level)
 igralec2 = Igralec(ovire=level)
+igralec.rect.bottom = VISINA
+igralec2.rect.bottom = VISINA
 
 # Oba igralca dodamo v skupino, da ju lazje skupaj risemo in posodabljamo
 igra_skupina = pygame.sprite.Group()
