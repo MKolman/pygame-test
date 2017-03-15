@@ -19,7 +19,7 @@ class Igralec(pygame.sprite.Sprite):
     # Metoda __init__ je funkcija, ki se zazene ob kreairanju novega igralca.
     # V njej nastavimo vse osnovne lastnosti igralca
     def __init__(self, up=pygame.K_UP, down=pygame.K_DOWN,
-                 left=pygame.K_LEFT, right=pygame.K_RIGHT, ovire=None):
+                 left=pygame.K_LEFT, right=pygame.K_RIGHT, ovire=None, player=1):
         super().__init__()
         # Zapomnimo si življenje
         self.ziv = 100
@@ -34,10 +34,23 @@ class Igralec(pygame.sprite.Sprite):
         self.right = right
 
         # Ustvari sliko igralca, ki je nakljucne barve
-        self.image = pygame.Surface((50, 50))
+        self.image = pygame.Surface((55, 72), pygame.SRCALPHA)
         self.barva = (randint(0, 255), randint(0, 255), randint(0, 255))
         self.rect = self.image.get_rect()
-        self.narisi_me()
+
+        # Shranimo si slike animacij
+        if player == 1:
+            self.slike = pygame.image.load("spritesheet.png")
+        else:
+            self.slike = pygame.image.load("spritesheet2.png")
+
+        # Nastavimo eno sliko
+        self.image.blit(self.slike, (0, 0), (5, 4, 55, 74))
+                        # (55*0+5, 4, 55*(0+1), 76))
+        self.stevec = {"tek": 0, "mir": 0}
+        self.trajanje = 8
+        self.levo = False
+        # self.narisi_me()
 
         # hitrosti igralca
         self.vx = 0
@@ -53,6 +66,28 @@ class Igralec(pygame.sprite.Sprite):
 
     # Metoda, ki izriše našo sliko na pravilno mesto zaslona
     def narisi_me(self):
+        self.image.fill((0, 0, 0, 0))
+        if self.na_oviri() is False:
+            self.image.blit(self.slike, (0, 0),
+                            (2, 248, 52, 320))
+            if self.vy > 0:
+                self.image = pygame.transform.flip(self.image, False, True)
+        elif abs(self.vx) > 1:
+            self.stevec["tek"] += 1
+            self.stevec["tek"] %= 4*self.trajanje
+            st_slike = int(self.stevec["tek"] / self.trajanje)
+            self.image.blit(self.slike, (0, 0),
+                            (55*st_slike+5, 4, 55*(st_slike+1), 76))
+        else:
+            self.stevec["mir"] += 1
+            self.stevec["mir"] %= 4*self.trajanje
+            st_slike = int(self.stevec["mir"] / self.trajanje)
+            self.image.blit(self.slike, (0, 0),
+                            (56*st_slike, 169, 56*st_slike+50, 241))
+
+        if self.levo:
+            self.image = pygame.transform.flip(self.image, True, False)
+        return
         # Napolnimo se z barvo
         self.image.fill(self.barva)
         # Napišimo preostanek življenja
@@ -86,11 +121,11 @@ class Igralec(pygame.sprite.Sprite):
         # Najprej si zabeležimo smer premika
         self.smeri[smer] = status
 
-        hitrost = 10
+        hitrost = 6
 
         # Tipka dol ne naredi nič
-        if self.smeri[self.down]:
-            pass
+        if self.smeri[self.down] and self.na_oviri():
+            self.rect.y += 1
         # S tipko gor skočimo
         if self.smeri[self.up] and self.na_oviri():
             self.vy = -20
@@ -99,8 +134,10 @@ class Igralec(pygame.sprite.Sprite):
         self.vx = 0
         if self.smeri[self.left]:
             self.vx = -hitrost
+            self.levo = True
         if self.smeri[self.right]:
             self.vx = hitrost
+            self.levo = False
 
     # Vsak frame igre moramo premakniti igralca. To dela metoda update, ki jo
     # klicemo v vsakem prehodu
@@ -197,12 +234,13 @@ level.add(Plato(250, 300, 50, 10))
 level.add(Plato(500, 200, 50, 10))
 level.add(Plato(300, 100, 50, 10))
 level.add(Plato(10, 100, 100, 10))
+level.add(Plato(10, 160, 100, 10))
 # Spodaj dodamo še: level.draw(ekran)
 
 # Ustvarimo dva igralca, vsakega s svojim setom ukaznih tipk
 igralec = Igralec(pygame.K_w, pygame.K_s,
-                  pygame.K_a, pygame.K_d, ovire=level)
-igralec2 = Igralec(ovire=level)
+                  pygame.K_a, pygame.K_d, ovire=level, player=1)
+igralec2 = Igralec(ovire=level, player=2)
 igralec.rect.bottom = VISINA
 igralec2.rect.bottom = VISINA
 
