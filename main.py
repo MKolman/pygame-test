@@ -21,6 +21,8 @@ class Igralec(pygame.sprite.Sprite):
     def __init__(self, up=pygame.K_UP, down=pygame.K_DOWN,
                  left=pygame.K_LEFT, right=pygame.K_RIGHT, ovire=None, player=1):
         super().__init__()
+        # Oznacimo si katera vrata trenutno odpiramo
+        self.vrata = []
         # Zapomnimo si življenje
         self.ziv = 100
 
@@ -142,21 +144,27 @@ class Igralec(pygame.sprite.Sprite):
     # Vsak frame igre moramo premakniti igralca. To dela metoda update, ki jo
     # klicemo v vsakem prehodu
     def update(self):
+        for vrata in self.vrata:
+            vrata.tip = 5
+            vrata.pobarvaj_me()
+        self.vrata = []
+
         # Najprej poglejmo premik v x smeri
         self.premik(self.vx, 0)
-        # Poglejmo ali smo se ob premiku v x smer kam zaleteli
-        # Ta del smo zakomentirali, saj želimo, prehodne ovire v smeri x-y
-        # for ov in sc(self, self.ovire, False):
-        #     if self.vx > 0:
-        #         self.rect.right = ov.rect.left
-        #     else:
-        #         self.rect.left = ov.rect.right
-        #     self.vx = 0
+        # Poglejmo ali smo se ob premiku v x smeri zaleteli v vrata
+        for ov in sc(self, self.ovire, False):
+            if ov.tip == 5:
+                if self.vx > 0:
+                    self.rect.right = ov.rect.left
+                else:
+                    self.rect.left = ov.rect.right
+                self.vx = 0
 
         # Naj se zgodi gravitacija
         self.vy += 1
         # Sedaj porihtajmo premik v y smeri
         prejsnje_dno = self.rect.bottom
+        prejsnja_hitrost = self.vy
         self.premik(0, self.vy)
         # Če se zabijemo v kakšno oviro:
         for ov in sc(self, self.ovire, False):
@@ -164,13 +172,26 @@ class Igralec(pygame.sprite.Sprite):
                 # ovira tipa 3 je CILJ
                 print("Zmagal si")
                 sys.exit(0)
-            if self.vy > 0 and prejsnje_dno <= ov.rect.top:
+            if ov.tip == 5:
+                # Če se zabijemo v vrata iz katerekoli smeri
+                if prejsnja_hitrost > 0:
+                    self.rect.bottom = ov.rect.top
+                else:
+                    self.rect.top = ov.rect.bottom
+                self.vy = 0
+            elif ov.tip != 6 and prejsnja_hitrost > 0 and prejsnje_dno <= ov.rect.top:
                 # Če smo se zabili v oviro z zgornje strani, se ustavimo
-                self.rect.bottom = ov.rect.top
+                self.rect.bottom = min(ov.rect.top, self.rect.bottom)
                 self.vy = 0
             if ov.tip == 1:
                 # Ovira tipa 1 nas poškoduje
                 self.ziv -= 5
+            if ov.tip == 4:
+                # Zabili smo se v gumb
+                self.vrata += ov.podatki
+                for vrata in ov.podatki:
+                    vrata.tip = 6
+                    vrata.pobarvaj_me()
         if self.ziv <= 0:
             self.umri()
         self.narisi_me()
@@ -204,22 +225,34 @@ class Plato(pygame.sprite.Sprite):
         1: Plato, ki nas poskoduje,
         2: Plato skozi katerega nikakor ne moremo,
         3: Cilj,
+        4: Gumb za odpiranje vrat
+        5: Vrata
+        6: Odprta vrata
     """
     # Vse kar potrebujemo so položaj (x, y) in dimenzije (w, h)
-    def __init__(self, x=100, y=300, w=200, h=10, tip=0):
+    def __init__(self, x=100, y=300, w=200, h=10, tip=0, podatki=None):
         super().__init__()
         self.image = pygame.Surface((w, h))
-        if tip == 0:
-            self.image.fill((0, 255, 0))
-        elif tip == 1:
-            self.image.fill((255, 0, 0))
-        elif tip == 3:
-            self.image.fill((255, 255, 0))
-
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
         self.tip = tip
+        self.podatki = podatki
+        self.pobarvaj_me()
+
+    def pobarvaj_me(self):
+        if self.tip == 0:
+            self.image.fill((0, 255, 0))
+        elif self.tip == 1:
+            self.image.fill((255, 0, 0))
+        elif self.tip == 3:
+            self.image.fill((255, 255, 0))
+        elif self.tip == 4:
+            self.image.fill((0, 0, 255))
+        elif self.tip == 5:
+            self.image.fill((0, 0, 0))
+        elif self.tip == 6:
+            self.image.fill((255, 255, 255))
 
 
 # Naredimo nekaj odskočišč za igralce in jih poimenujemo "level"
@@ -229,12 +262,20 @@ level.add(Plato(10, 10, 50, 50, 3))
 # Nevarnosti
 level.add(Plato(200, 395, 400, 10, 1))
 level.add(Plato(200, 300, 50, 10, 1))
+
+# Gumb in vrata
+vrata1 = Plato(100, -1000, 10, 1100, 5)
+# vrata2 = Plato(250, 200, 100, 10, 5)
+vrata2 = Plato(300, 100, 50, 10, 5)
+level.add(vrata1)
+level.add(vrata2)
+level.add(Plato(350, 385, 50, 10, 4, [vrata1, vrata2]))
+
 # Odskocisca
 level.add(Plato(250, 300, 50, 10))
 level.add(Plato(500, 200, 50, 10))
-level.add(Plato(300, 100, 50, 10))
 level.add(Plato(10, 100, 100, 10))
-level.add(Plato(10, 160, 100, 10))
+# level.add(Plato(10, 160, 100, 10))
 # Spodaj dodamo še: level.draw(ekran)
 
 # Ustvarimo dva igralca, vsakega s svojim setom ukaznih tipk
@@ -243,6 +284,7 @@ igralec = Igralec(pygame.K_w, pygame.K_s,
 igralec2 = Igralec(ovire=level, player=2)
 igralec.rect.bottom = VISINA
 igralec2.rect.bottom = VISINA
+igralec2.rect.right = SIRINA
 
 # Oba igralca dodamo v skupino, da ju lazje skupaj risemo in posodabljamo
 igra_skupina = pygame.sprite.Group()
